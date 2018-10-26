@@ -1,0 +1,183 @@
+---
+title: "Untitled"
+author: "laura_cruz"
+date: "25 de outubro de 2018"
+output: ioslides_presentation
+---
+
+## Título: Análise GAL: Febre Amarela ##
+>- __Aluna:__ Laura Nogueira da Cruz 
+>- __ENAP:__ Especializa?ao: An?lise de dados em Pol?ticas P?blicas
+>- __Professor:__ Frederico Bertholini
+
+
+## __OBJETO__ ## 
+###Este relat?rio refere-se ao banco de dados do Minit?rio da Sa?de do sistema GAL (gerenciador de Ambiente Laboratorial), per?odo 2011 a 2018, referente as solicita??es laboratoriais relacionadas a Febre Amarela e agravos solicitados conjuntamente para embassamento de laudos m?dicos liberados no SUS.### 
+
+##__OBJETIVOS__##
+#### Especificamente este trabalho pretende identificar os seguintes pontos: 
+>- __1)__ Tempo m?dio entre solicita?ao do exame e libera?co do resultado ao paciente. 
+>- __2)__ Identificação das Unidades Federativas que possuem liberação de exames mais rapidamente/lentamente.
+>- __3)__ Verificação do tempo m?dio de libera?ao dos exames para metodologias de maior solicita??o no SUS (PCR em tempo real, MAC-Elisa e Isolamento viral).
+
+##__CONTEXTO__## 
+### A análise apresentada refor?a a import?ncia das informa??es cadastradas no sistema GAL para acompanhamento quantitativo dos exames liberados como potencial ferramenta de gest?o de qualidade, alertas epidemiológicos e embassamento de prioriza??o da vigil?ncia de doen?as transmiss?veis para as a??es de vigil?ncia em sa?de. ### 
+
+##__MÉTODOS__##
+#### Dados coletados pelo sistema GAL na rede laboratorial do SUS, banco espec?fico de Febre Amarela do período de 2011 a 2018. Os dados foram  inicialmente tratados e organizados no excel para correta leitura no sistema R, incluindo limpeza de cabe?alho, retirada de colunas repetitivas, padroniza?ao de marcadores num?ricos. Ap?s foram instalados no R studio pacotes de an?lise de dados (tidyverse, lubridate, janitor, readxl, stringr, data.table, repmis, survey, srvyr, ggplot2, plotly), sendo realizado versionamento e publica??o no GitHub com visualizações interativas no RMarkdown.####   
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+lista.de.pacotes = c("tidyverse","lubridate","janitor","readxl","stringr","data.table",
+                     "repmis","survey","srvyr", "ggplot2", "plotly") # escreva a lista de pacotes
+novos.pacotes <- lista.de.pacotes[!(lista.de.pacotes %in%
+                                      installed.packages()[,"Package"])]
+if(length(novos.pacotes) > 0) {install.packages(novos.pacotes)}
+lapply(lista.de.pacotes, require, character.only=T)
+rm(lista.de.pacotes,novos.pacotes)
+gc()
+
+febre_amarela <- fread("C:/Users/laura/Documents/dados-secundarios/febre_amarela.csv")
+```
+
+##__GRÁFICOS__##
+#### Gráfico 1: Tempo encaminhamento amostra (todas as metodologias do sistema).####
+```{r}
+febre_amarela_tempo <- febre_amarela %>% 
+  dplyr::select(estado_requisicao, data_solicitacao, data_liberacao) %>%
+ na.omit() %>%
+  dplyr::mutate(
+         data_solicitacao = dmy(str_sub(as.character(data_solicitacao),1,10)),
+         data_liberacao = dmy(str_sub(as.character(data_liberacao),1,10)),
+         tempo =  data_liberacao - data_solicitacao,
+         ano = year(data_solicitacao)) %>%
+          dplyr::filter(ano %in% c(2018, 2017, 2016)) %>%
+  group_by(estado_requisicao,ano) %>%
+  summarise(n=n( ),
+            media_tempo = mean(tempo,na.rm=T),
+            min_tempo = min(tempo,na.rm=T),
+            max_tempo = max(tempo,na.rm=T)) 
+
+ggplot(data=febre_amarela_tempo,aes(x = estado_requisicao, y =media_tempo, 
+                                    group=ano,
+                                    fill = estado_requisicao, 
+                                    color=estado_requisicao,
+                      ymax = max_tempo, 
+                      ymin = min_tempo)) +
+           geom_bar(stat = "identity",alpha=0.6) +
+           geom_errorbar(width = 0,size=3) +
+  labs(title = "Tempo Liberação requisicao por UF/dias") +
+  facet_wrap(~ano,ncol = 1) +
+  theme(legend.position = "none")
+```
+
+
+## Gráfico 2: Metodologias solicitadas na rede SUS.
+```{r}
+barplot(sort(table(febre_amarela$metodologia)), las=2,main= "Metodologia: Ano 2011 a 2018")
+```
+
+
+## Gráfico3: Tempo libera??o requisicao da metodologia de PCR, UF/dias.
+```{r}
+FA_tempoPCR <- febre_amarela %>% 
+  dplyr::select(estado_requisicao, data_solicitacao, data_liberacao, metodologia) %>%
+  na.omit() %>%
+  dplyr::mutate(
+    data_solicitacao = dmy(str_sub(as.character(data_solicitacao),1,10)),
+    data_liberacao = dmy(str_sub(as.character(data_liberacao),1,10)),
+    tempo =  data_liberacao - data_solicitacao,
+    ano = year(data_solicitacao)) %>%
+  dplyr::filter(ano %in% c(2018, 2017, 2016)) %>%
+dplyr::filter(metodologia %in% c("RT-PCR em tempo real") )%>%
+  group_by(estado_requisicao,ano) %>%
+  summarise(n=n( ),
+            media_tempo = mean(tempo,na.rm=T),
+            min_tempo = min(tempo,na.rm=T),
+            max_tempo = max(tempo,na.rm=T))
+
+#1A ggplot_tempo_encaminhamentoPCR#
+ ggplot(data=FA_tempoPCR,aes(x = estado_requisicao, y =media_tempo, 
+                                    group=ano,
+                                    fill = estado_requisicao, 
+                                    color=estado_requisicao,
+                                    ymax = max_tempo, 
+                                    ymin = min_tempo)) +
+  geom_bar(stat = "identity",alpha=0.6) +
+  geom_errorbar(width = 0,size=3) +
+  labs(title = "Tempo Liberação requisicao da metodologia de PCR em tempo real, UF/dias") +
+  facet_wrap(~ano,ncol = 1) +
+  theme(legend.position = "none")
+```
+
+## Gráfico4: Tempo liberação requisicao da metodologia MAC-Elisa, UF/dias.
+```{r}
+FA_MACELISA <- febre_amarela %>% 
+   dplyr::select(estado_requisicao, data_solicitacao, data_liberacao, metodologia) %>%
+   na.omit() %>%
+   dplyr::mutate(
+     data_solicitacao = dmy(str_sub(as.character(data_solicitacao),1,10)),
+     data_liberacao = dmy(str_sub(as.character(data_liberacao),1,10)),
+     tempo =  data_liberacao - data_solicitacao,
+     ano = year(data_solicitacao)) %>%
+   dplyr::filter(ano %in% c(2018, 2017, 2016)) %>%
+   dplyr::filter(metodologia %in% c("Reacao Imunoenzimatica de Captura (MAC-ELISA)") )%>%
+   group_by(estado_requisicao,ano) %>%
+   summarise(n=n( ),
+             media_tempo = mean(tempo,na.rm=T),
+             min_tempo = min(tempo,na.rm=T),
+             max_tempo = max(tempo,na.rm=T)) 
+
+ ggplot(data=FA_MACELISA,aes(x = estado_requisicao, y =media_tempo, 
+                                     group=ano,
+                                     fill = estado_requisicao, 
+                                     color=estado_requisicao,
+                                     ymax = max_tempo, 
+                                     ymin = min_tempo)) +
+   geom_bar(stat = "identity",alpha=0.6) +
+   geom_errorbar(width = 0,size=3) +
+   labs(title = "Tempo Libera??o requisicao da metodologia de MAC-ELISA, UF/dias") +
+   facet_wrap(~ano,ncol = 1) +
+   theme(legend.position = "none")
+```
+
+## Gráfico5:Tempo liberção requisicao metodologia Isolamento Viral, UF/dias.
+```{r}
+FA_Isolamento_Viral <- febre_amarela %>% 
+   dplyr::select(estado_requisicao, data_solicitacao, data_liberacao, metodologia) %>%
+   na.omit() %>%
+   dplyr::mutate(
+     data_solicitacao = dmy(str_sub(as.character(data_solicitacao),1,10)),
+     data_liberacao = dmy(str_sub(as.character(data_liberacao),1,10)),
+     tempo =  data_liberacao - data_solicitacao,
+     ano = year(data_solicitacao)) %>%
+   dplyr::filter(ano %in% c(2018, 2017, 2016)) %>%
+   dplyr::filter(metodologia %in% c("Isolamento Viral") )%>%
+   group_by(estado_requisicao,ano) %>%
+   summarise(n=n( ),
+             media_tempo = mean(tempo,na.rm=T),
+             min_tempo = min(tempo,na.rm=T),
+             max_tempo = max(tempo,na.rm=T)) 
+ 
+ #1B ggplot_tempo_encaminhamentoPCR#
+ ggplot(data=FA_Isolamento_Viral,aes(x = estado_requisicao, y =media_tempo, 
+                             group=ano,
+                             fill = estado_requisicao, 
+                             color=estado_requisicao,
+                             ymax = max_tempo, 
+                             ymin = min_tempo)) +
+   geom_bar(stat = "identity",alpha=0.6) +
+   geom_errorbar(width = 0,size=3) +
+   labs(title = "Tempo Liberação requisicao da metodologia de Isolamento_Viral, UF/dias") +
+   facet_wrap(~ano,ncol = 1) +
+   theme(legend.position = "none")
+```
+
+
+##An?lise##
+######Verifica-se significativa variaÃ§Ã£o de tempo de encaminhamento das amostras entre as 27 UFs do Brasil, sendo que o Acre apresenta maior tempo mÃ©dio para liberção em 2016, 2017 e 2018. O grÃ¡fico indica ainda aumento do nÃºmero de UFs que cadastram amostras no GAL, como Bahia (BA) e Sergipe (SE) que nÃ£o registraram nenhuma amostra em 2016 mas observa-se registro em 2017 e 2018.  Analisando as metodologias solicitadas na rede(Gr?fico 2), observa-se maior solicita?ao para PCR em tempo real, seguido de MAC-Elisa e Isolamento viral. Desta forma foi verificado o tempop de libera?ao destas metodologias na rede.Ao analisar o tempo mÃ©dio de liberaÃ§Ã£o de requisiÃ§Ã£o para as metodologias especificas de PCR, Mac-Elisa e Isolamento viral (GrÃ¡fico 3, 4 e 5), observa-se grande varição entre as UFs podendo indicar as diversas condiçõeses laboratoriais do país, com reduçãoo do número de estados que realizam metodologias de maior complexidade (Ex. isolamento viral) ou a falta de cadastro dos exames no sistema GAL. 
+
+
+##__CONCLUS?ES__##
+##### Os resultados apresentados refor?am a import?ncia da qualidade das amostras (fases de coleta, cadastro, transporte, processamento e libera?ao de laudo) que refletem o tempo total de libera?ao da requisi??o e qualidade das informa??es cadastradas no sistema GAL para acompanhamento quantitativo dos exames liberados como potencial ferramenta de alertas epidemiol?gicos, embassamento de priorização da vigilância de doen?as transmissíveis e açoes necessárias para vigilância em saúde do país.##### 
